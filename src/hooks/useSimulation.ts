@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { SimulationEngine, SimState } from '../engine'
+import { SimulationEngine } from '../engine'
+import type { SimState } from '../engine'
 
 export function useSimulation() {
   const engine = useRef(new SimulationEngine())
