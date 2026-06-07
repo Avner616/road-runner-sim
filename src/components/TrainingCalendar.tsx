@@ -1,7 +1,7 @@
 // Road Runner Sim — TrainingCalendar.tsx
 // Training calendar screen. Consumes useTrainingCalendar hook only — no engine imports.
 
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTrainingCalendar } from '../hooks/useTrainingCalendar';
 import type { TrainingSession, SessionType, DayOfWeek } from '../engine/types/training';
 import {
@@ -9,7 +9,10 @@ import {
   SESSION_LABELS,
   DAY_LABELS,
   DAY_SHORT,
+  isRepeatBlock,
 } from '../engine/types/training';
+import { summarizeSteps, computeTotalDistanceKm, formatStepDuration, formatPace } from '../engine/TrainingCalendarEngine';
+import { SessionBuilderModal } from './SessionBuilderModal';
 
 // ─── Color map ────────────────────────────────────────────────────────────────
 
@@ -106,12 +109,7 @@ function SessionCard({
         <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
         <span className="truncate text-xs font-medium text-white">{session.name}</span>
       </div>
-      {(session.distance != null || session.duration != null) && (
-        <div className="mt-1 flex gap-2 pl-3.5 text-xs text-zinc-400">
-          {session.distance != null && <span>{session.distance} km</span>}
-          {session.duration != null && <span>{session.duration} min</span>}
-        </div>
-      )}
+      <p className="mt-0.5 truncate pl-3.5 text-xs text-zinc-400">{summarizeSteps(session.steps)}</p>
     </div>
   );
 }
@@ -189,138 +187,6 @@ function DayColumn({
   );
 }
 
-// ─── Add session modal ────────────────────────────────────────────────────────
-
-function AddSessionModal({
-  day,
-  onAdd,
-  onClose,
-}: {
-  day: DayOfWeek;
-  onAdd: (params: { type: SessionType; name?: string; distance?: number; duration?: number; notes?: string }) => void;
-  onClose: () => void;
-}) {
-  const [type, setType] = useState<SessionType>('easy-run');
-  const [name, setName] = useState(SESSION_LABELS['easy-run']);
-  const [nameEdited, setNameEdited] = useState(false);
-  const [distance, setDistance] = useState('');
-  const [duration, setDuration] = useState('');
-  const [notes, setNotes] = useState('');
-
-  function handleTypeChange(next: SessionType) {
-    setType(next);
-    if (!nameEdited) setName(SESSION_LABELS[next]);
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    onAdd({
-      type,
-      name:     name || undefined,
-      distance: distance ? Number(distance) : undefined,
-      duration: duration ? Number(duration) : undefined,
-      notes:    notes || undefined,
-    });
-    onClose();
-  }
-
-  const { dot } = SESSION_COLORS[type];
-
-  return (
-    <Modal onClose={onClose}>
-      <h2 className="mb-5 text-lg font-bold text-white">
-        Add session — {DAY_LABELS[day]}
-      </h2>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* Type */}
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Type</span>
-          <div className="relative">
-            <span className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full ${dot}`} />
-            <select
-              value={type}
-              onChange={e => handleTypeChange(e.target.value as SessionType)}
-              className="w-full appearance-none rounded-lg bg-gray-800 py-2 pl-8 pr-4 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {SESSION_TYPES.map(t => (
-                <option key={t} value={t}>{SESSION_LABELS[t]}</option>
-              ))}
-            </select>
-          </div>
-        </label>
-
-        {/* Name */}
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Name</span>
-          <input
-            type="text"
-            value={name}
-            onChange={e => { setName(e.target.value); setNameEdited(true); }}
-            placeholder={SESSION_LABELS[type]}
-            className="rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
-
-        {/* Distance + Duration */}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Distance (km)</span>
-            <input
-              type="number"
-              min="0"
-              step="0.1"
-              value={distance}
-              onChange={e => setDistance(e.target.value)}
-              placeholder="—"
-              className="rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Duration (min)</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={duration}
-              onChange={e => setDuration(e.target.value)}
-              placeholder="—"
-              className="rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
-        </div>
-
-        {/* Notes */}
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Notes</span>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Optional notes…"
-            rows={2}
-            className="resize-none rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
-
-        <div className="flex gap-3 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:border-zinc-500 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 active:bg-indigo-700 transition-colors"
-          >
-            Add session
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 // ─── Session detail modal ─────────────────────────────────────────────────────
 
 function SessionDetailModal({
@@ -350,22 +216,46 @@ function SessionDetailModal({
       </div>
 
       <div className="mb-5 space-y-3">
-        {(session.distance != null || session.duration != null) && (
-          <div className="flex gap-6">
-            {session.distance != null && (
-              <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wide">Distance</p>
-                <p className="text-sm font-semibold text-white">{session.distance} km</p>
-              </div>
-            )}
-            {session.duration != null && (
-              <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wide">Duration</p>
-                <p className="text-sm font-semibold text-white">{session.duration} min</p>
-              </div>
-            )}
+        {/* Step list */}
+        {session.steps.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-zinc-500 uppercase tracking-wide">Steps</p>
+            <ol className="space-y-1">
+              {session.steps.map(entry => {
+                if (isRepeatBlock(entry)) {
+                  return (
+                    <li key={entry.id} className="space-y-0.5">
+                      <span className="text-xs font-semibold text-zinc-400">{entry.reps}× repeat</span>
+                      <ol className="ml-4 space-y-0.5">
+                        {entry.steps.map(s => (
+                          <li key={s.id} className="text-xs text-zinc-300">
+                            {s.label} — {formatStepDuration(s)}
+                            {s.target?.kind === 'effort' && <span className="ml-1 text-zinc-500">Zone {s.target.zone}</span>}
+                            {s.target?.kind === 'pace'   && <span className="ml-1 text-zinc-500">{formatPace(s.target.minSecPerKm)}–{formatPace(s.target.maxSecPerKm)}</span>}
+                          </li>
+                        ))}
+                      </ol>
+                    </li>
+                  );
+                }
+                return (
+                  <li key={entry.id} className="text-xs text-zinc-300">
+                    {entry.label} — {formatStepDuration(entry)}
+                    {entry.target?.kind === 'effort' && <span className="ml-1 text-zinc-500">Zone {entry.target.zone}</span>}
+                    {entry.target?.kind === 'pace'   && <span className="ml-1 text-zinc-500">{formatPace(entry.target.minSecPerKm)}–{formatPace(entry.target.maxSecPerKm)}</span>}
+                  </li>
+                );
+              })}
+            </ol>
           </div>
         )}
+        {/* Stats */}
+        {(() => {
+          const km = computeTotalDistanceKm(session.steps);
+          return km > 0 ? (
+            <p className="text-xs text-zinc-500">{km} km total</p>
+          ) : null;
+        })()}
         {session.notes && (
           <div>
             <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Notes</p>
@@ -395,7 +285,7 @@ function SessionDetailModal({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function TrainingCalendar() {
-  const { plan, addSession, removeSession, moveSession } = useTrainingCalendar();
+  const { plan, customPresets, addSession, removeSession, moveSession, saveCustomPreset } = useTrainingCalendar();
 
   // Drag state in a ref — no re-render needed while dragging
   const dragRef = useRef<{ sessionId: string; fromDay: DayOfWeek } | null>(null);
@@ -463,9 +353,11 @@ export function TrainingCalendar() {
 
       {/* Modals */}
       {addDay !== null && (
-        <AddSessionModal
+        <SessionBuilderModal
           day={addDay}
-          onAdd={params => addSession(addDay, params)}
+          customPresets={customPresets}
+          onAdd={session => addSession(addDay, session)}
+          onSavePreset={saveCustomPreset}
           onClose={() => setAddDay(null)}
         />
       )}

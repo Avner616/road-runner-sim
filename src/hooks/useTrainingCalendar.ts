@@ -2,35 +2,28 @@
 // Bridges TrainingCalendarEngine to React. No game logic here.
 
 import { useState, useCallback } from 'react';
-import type { WeeklyPlan, SessionType, DayOfWeek } from '../engine/types/training';
+import type { WeeklyPlan, TrainingSession, SessionPreset, DayOfWeek } from '../engine/types/training';
 import {
   createEmptyWeeklyPlan,
-  createSession,
   addSessionToDay,
   removeSessionFromDay,
   moveSession as engineMoveSession,
 } from '../engine/TrainingCalendarEngine';
 
-interface AddSessionParams {
-  type: SessionType;
-  name?: string;
-  distance?: number;
-  duration?: number;
-  notes?: string;
-}
-
 interface UseTrainingCalendarReturn {
   plan: WeeklyPlan;
-  addSession: (day: DayOfWeek, params: AddSessionParams) => void;
+  customPresets: SessionPreset[];
+  addSession: (day: DayOfWeek, session: TrainingSession) => void;
   removeSession: (day: DayOfWeek, sessionId: string) => void;
   moveSession: (fromDay: DayOfWeek, toDay: DayOfWeek, sessionId: string) => void;
+  saveCustomPreset: (preset: SessionPreset) => void;
 }
 
 export function useTrainingCalendar(): UseTrainingCalendarReturn {
   const [plan, setPlan] = useState<WeeklyPlan>(createEmptyWeeklyPlan);
+  const [customPresets, setCustomPresets] = useState<SessionPreset[]>([]);
 
-  const addSession = useCallback((day: DayOfWeek, params: AddSessionParams) => {
-    const session = createSession(params);
+  const addSession = useCallback((day: DayOfWeek, session: TrainingSession) => {
     setPlan(prev => addSessionToDay(prev, day, session));
   }, []);
 
@@ -38,12 +31,13 @@ export function useTrainingCalendar(): UseTrainingCalendarReturn {
     setPlan(prev => removeSessionFromDay(prev, day, sessionId));
   }, []);
 
-  const moveSession = useCallback(
-    (fromDay: DayOfWeek, toDay: DayOfWeek, sessionId: string) => {
-      setPlan(prev => engineMoveSession(prev, fromDay, toDay, sessionId));
-    },
-    [],
-  );
+  const moveSession = useCallback((fromDay: DayOfWeek, toDay: DayOfWeek, sessionId: string) => {
+    setPlan(prev => engineMoveSession(prev, fromDay, toDay, sessionId));
+  }, []);
 
-  return { plan, addSession, removeSession, moveSession };
+  const saveCustomPreset = useCallback((preset: SessionPreset) => {
+    setCustomPresets(prev => [...prev.filter(p => p.id !== preset.id), preset]);
+  }, []);
+
+  return { plan, customPresets, addSession, removeSession, moveSession, saveCustomPreset };
 }
