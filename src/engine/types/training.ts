@@ -23,7 +23,12 @@ export interface EffortTarget {
   zone: 1 | 2 | 3 | 4 | 5;
 }
 
-export type StepTarget = PaceTarget | EffortTarget;
+export interface HRTarget {
+  kind: 'hr';
+  zone: 1 | 2 | 3 | 4 | 5;
+}
+
+export type StepTarget = PaceTarget | EffortTarget | HRTarget;
 
 // ─── Session structure ────────────────────────────────────────────────────────
 
@@ -111,6 +116,15 @@ export const EFFORT_ZONE_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
   3: 'Moderate',
   4: 'Hard',
   5: 'Max',
+};
+
+// Joe Friel heart-rate training zones (based on lactate-threshold HR)
+export const HR_ZONE_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: 'Recovery (<80% LTHR)',
+  2: 'Aerobic (80–89% LTHR)',
+  3: 'Tempo (90–93% LTHR)',
+  4: 'Sub-Threshold (94–99% LTHR)',
+  5: 'VO₂ Max (≥100% LTHR)',
 };
 
 export const COMMON_STEP_LABELS: string[] = [

@@ -1,13 +1,14 @@
 // Road Runner Sim — SessionBuilderModal.tsx
 // Two-tab session builder: library picker and custom step builder.
 
-import { useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type {
   TrainingSession, SessionPreset, SessionEntry, SessionStep,
   RepeatBlock, SessionType, DayOfWeek, StepTarget,
 } from '../engine/types/training';
 import {
-  SESSION_TYPES, SESSION_LABELS, DAY_LABELS, EFFORT_ZONE_LABELS, COMMON_STEP_LABELS, isRepeatBlock,
+  SESSION_TYPES, SESSION_LABELS, DAY_LABELS,
+  EFFORT_ZONE_LABELS, HR_ZONE_LABELS, COMMON_STEP_LABELS, isRepeatBlock,
 } from '../engine/types/training';
 import { getAllPresets } from '../engine/SessionLibrary';
 import {
@@ -84,6 +85,9 @@ function StepPreviewList({ steps }: { steps: SessionEntry[] }) {
                     {s.target && s.target.kind === 'effort' && (
                       <span className="ml-1 text-zinc-500">Zone {s.target.zone}</span>
                     )}
+                    {s.target && s.target.kind === 'hr' && (
+                      <span className="ml-1 text-zinc-500">HR Z{s.target.zone}</span>
+                    )}
                     {s.target && s.target.kind === 'pace' && (
                       <span className="ml-1 text-zinc-500">{formatPace(s.target.minSecPerKm)}–{formatPace(s.target.maxSecPerKm)}</span>
                     )}
@@ -98,6 +102,9 @@ function StepPreviewList({ steps }: { steps: SessionEntry[] }) {
             {entry.label} — {formatStepDuration(entry)}
             {entry.target && entry.target.kind === 'effort' && (
               <span className="ml-1 text-zinc-500">Zone {entry.target.zone}</span>
+            )}
+            {entry.target && entry.target.kind === 'hr' && (
+              <span className="ml-1 text-zinc-500">HR Z{entry.target.zone}</span>
             )}
             {entry.target && entry.target.kind === 'pace' && (
               <span className="ml-1 text-zinc-500">{formatPace(entry.target.minSecPerKm)}–{formatPace(entry.target.maxSecPerKm)}</span>
@@ -117,25 +124,26 @@ function TargetEditor({ target, onChange }: { target?: StepTarget; onChange: (t?
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* Kind selector */}
-      {(['none', 'effort', 'pace'] as const).map(k => (
+      {(['none', 'effort', 'hr', 'pace'] as const).map(k => (
         <button
           key={k}
           type="button"
           onClick={() => {
-            if (k === 'none') onChange(undefined);
+            if (k === 'none')   onChange(undefined);
             else if (k === 'effort') onChange({ kind: 'effort', zone: 2 });
-            else onChange({ kind: 'pace', minSecPerKm: 270, maxSecPerKm: 300 });
+            else if (k === 'hr')    onChange({ kind: 'hr',     zone: 2 });
+            else                    onChange({ kind: 'pace', minSecPerKm: 270, maxSecPerKm: 300 });
           }}
           className={[
-            'rounded px-2 py-0.5 text-xs capitalize transition-colors',
+            'rounded px-2 py-0.5 text-xs transition-colors',
             kind === k ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white',
           ].join(' ')}
         >
-          {k === 'none' ? 'No target' : k}
+          {k === 'none' ? 'No target' : k === 'hr' ? 'HR zone' : k === 'effort' ? 'Effort' : 'Pace'}
         </button>
       ))}
 
-      {/* Effort zone */}
+      {/* Effort zone (1–5) */}
       {target?.kind === 'effort' && (
         <div className="flex gap-1">
           {([1, 2, 3, 4, 5] as const).map(z => (
@@ -147,6 +155,26 @@ function TargetEditor({ target, onChange }: { target?: StepTarget; onChange: (t?
               className={[
                 'h-6 w-6 rounded text-xs font-bold transition-colors',
                 target.zone === z ? 'bg-indigo-500 text-white' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600',
+              ].join(' ')}
+            >
+              {z}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* HR zone (Joe Friel, 1–5) */}
+      {target?.kind === 'hr' && (
+        <div className="flex gap-1">
+          {([1, 2, 3, 4, 5] as const).map(z => (
+            <button
+              key={z}
+              type="button"
+              title={HR_ZONE_LABELS[z]}
+              onClick={() => onChange({ kind: 'hr', zone: z })}
+              className={[
+                'h-6 w-6 rounded text-xs font-bold transition-colors',
+                target.zone === z ? 'bg-rose-500 text-white' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600',
               ].join(' ')}
             >
               {z}
@@ -258,7 +286,11 @@ function BuilderStepRow({
           onClick={() => setShowTarget(v => !v)}
           className={['rounded px-2 py-1 text-xs transition-colors', showTarget ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-white'].join(' ')}
         >
-          {step.target ? (step.target.kind === 'effort' ? `Z${step.target.zone}` : 'pace') : '+ target'}
+          {step.target
+            ? step.target.kind === 'effort' ? `Z${step.target.zone}`
+              : step.target.kind === 'hr'   ? `HR${step.target.zone}`
+              : 'pace'
+            : '+ target'}
         </button>
 
         {/* Delete */}
@@ -267,6 +299,66 @@ function BuilderStepRow({
 
       {showTarget && (
         <div className="mt-2 pl-6">
+          <TargetEditor target={step.target} onChange={t => onChange({ ...step, target: t })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Nested step row (inside a repeat block) — has full target editor ─────────
+
+function NestedStepRow({
+  step, onChange, onDelete,
+}: {
+  step: SessionStep;
+  onChange: (s: SessionStep) => void;
+  onDelete: () => void;
+}) {
+  const [showTarget, setShowTarget] = useState(!!step.target);
+
+  return (
+    <div className="rounded border border-zinc-700 bg-zinc-800 p-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          list="step-labels"
+          type="text"
+          value={step.label}
+          onChange={e => onChange({ ...step, label: e.target.value })}
+          className="min-w-0 flex-1 rounded bg-zinc-700 px-2 py-0.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500"
+          placeholder="Step label"
+        />
+        <div className="flex overflow-hidden rounded border border-zinc-600 text-xs">
+          {(['distance', 'time'] as const).map(dt => (
+            <button key={dt} type="button" onClick={() => onChange({ ...step, durationType: dt })}
+              className={['px-1.5 py-0.5 transition-colors', step.durationType === dt ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:text-white'].join(' ')}>
+              {dt === 'distance' ? 'km' : 'min'}
+            </button>
+          ))}
+        </div>
+        <input
+          type="number"
+          min="0"
+          step={step.durationType === 'distance' ? '0.1' : '0.5'}
+          value={step.durationValue || ''}
+          onChange={e => onChange({ ...step, durationValue: parseFloat(e.target.value) || 0 })}
+          className="w-14 rounded bg-zinc-700 px-1.5 py-0.5 text-center text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500"
+        />
+        <button
+          type="button"
+          onClick={() => setShowTarget(v => !v)}
+          className={['rounded px-1.5 py-0.5 text-xs transition-colors', showTarget ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-white'].join(' ')}
+        >
+          {step.target
+            ? step.target.kind === 'effort' ? `Z${step.target.zone}`
+              : step.target.kind === 'hr'   ? `HR${step.target.zone}`
+              : 'pace'
+            : '+ target'}
+        </button>
+        <button type="button" onClick={onDelete} className="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
+      </div>
+      {showTarget && (
+        <div className="mt-1.5">
           <TargetEditor target={step.target} onChange={t => onChange({ ...step, target: t })} />
         </div>
       )}
@@ -295,8 +387,7 @@ function BuilderRepeatBlockRow({
   }
 
   function updateStep(i: number, s: SessionStep) {
-    const steps = block.steps.map((old, idx) => idx === i ? s : old);
-    onChange({ ...block, steps });
+    onChange({ ...block, steps: block.steps.map((old, idx) => idx === i ? s : old) });
   }
 
   function removeStep(i: number) {
@@ -329,35 +420,15 @@ function BuilderRepeatBlockRow({
         <button type="button" onClick={onDelete} className="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕ block</button>
       </div>
 
-      {/* Block steps */}
+      {/* Block steps — each has full label / duration / target editor */}
       <div className="ml-5 space-y-1.5">
         {block.steps.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-2 rounded border border-zinc-700 bg-zinc-800 p-1.5">
-            <input
-              list="step-labels"
-              type="text"
-              value={s.label}
-              onChange={e => updateStep(i, { ...s, label: e.target.value })}
-              className="min-w-0 flex-1 rounded bg-zinc-700 px-2 py-0.5 text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            <div className="flex overflow-hidden rounded border border-zinc-600 text-xs">
-              {(['distance', 'time'] as const).map(dt => (
-                <button key={dt} type="button" onClick={() => updateStep(i, { ...s, durationType: dt })}
-                  className={['px-1.5 py-0.5', s.durationType === dt ? 'bg-indigo-600 text-white' : 'text-zinc-400'].join(' ')}>
-                  {dt === 'distance' ? 'km' : 'min'}
-                </button>
-              ))}
-            </div>
-            <input
-              type="number"
-              min="0"
-              step={s.durationType === 'distance' ? '0.1' : '0.5'}
-              value={s.durationValue || ''}
-              onChange={e => updateStep(i, { ...s, durationValue: parseFloat(e.target.value) || 0 })}
-              className="w-14 rounded bg-zinc-700 px-1.5 py-0.5 text-center text-xs text-white outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            <button type="button" onClick={() => removeStep(i)} className="text-zinc-600 hover:text-red-400 transition-colors text-xs">✕</button>
-          </div>
+          <NestedStepRow
+            key={s.id}
+            step={s}
+            onChange={updated => updateStep(i, updated)}
+            onDelete={() => removeStep(i)}
+          />
         ))}
         <button type="button" onClick={addStep}
           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
@@ -475,9 +546,8 @@ function LibraryTab({
 // ─── Custom tab ───────────────────────────────────────────────────────────────
 
 function CustomTab({
-  onAdd, onSaveAndAdd,
+  onSaveAndAdd,
 }: {
-  onAdd: (session: TrainingSession) => void;
   onSaveAndAdd: (session: TrainingSession, preset: SessionPreset) => void;
 }) {
   const [sessionType, setSessionType] = useState<SessionType>('easy-run');
@@ -545,19 +615,14 @@ function CustomTab({
     };
   }
 
-  function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    onAdd(buildSession());
-  }
-
-  function handleSaveAndAdd(e: FormEvent) {
-    e.preventDefault();
+  function handleSaveAndAdd() {
     const session = buildSession();
     onSaveAndAdd(session, buildPreset(session));
   }
 
   return (
-    <form className="flex flex-col gap-4">
+    // onSubmit prevents Enter-key form submission from triggering page navigation
+    <form className="flex flex-col gap-4" onSubmit={e => e.preventDefault()}>
       {/* Header fields */}
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1">
@@ -664,16 +729,9 @@ function CustomTab({
         <button
           type="button"
           onClick={handleSaveAndAdd}
-          className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
-        >
-          Save preset & add
-        </button>
-        <button
-          type="submit"
-          onClick={handleAdd}
           className="flex-1 rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 active:bg-indigo-700 transition-colors"
         >
-          Add to day
+          Save preset & add to day
         </button>
       </div>
     </form>
@@ -695,11 +753,6 @@ export function SessionBuilderModal({ day, customPresets, onAdd, onSavePreset, o
 
   function handleLibrarySelect(preset: SessionPreset) {
     onAdd(createSessionFromPreset(preset));
-    onClose();
-  }
-
-  function handleCustomAdd(session: TrainingSession) {
-    onAdd(session);
     onClose();
   }
 
@@ -741,7 +794,7 @@ export function SessionBuilderModal({ day, customPresets, onAdd, onSavePreset, o
         {tab === 'library' ? (
           <LibraryTab customPresets={customPresets} onSelect={handleLibrarySelect} />
         ) : (
-          <CustomTab onAdd={handleCustomAdd} onSaveAndAdd={handleCustomSaveAndAdd} />
+          <CustomTab onSaveAndAdd={handleCustomSaveAndAdd} />
         )}
       </div>
     </Modal>
