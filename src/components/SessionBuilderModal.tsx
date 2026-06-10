@@ -1,7 +1,7 @@
 // Road Runner Sim — SessionBuilderModal.tsx
 // Two-tab session builder: library picker and custom step builder.
 
-import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type {
   TrainingSession, SessionPreset, SessionEntry, SessionStep,
   RepeatBlock, SessionType, DayOfWeek, StepTarget,
@@ -635,19 +635,19 @@ function CustomTab({
             className="rounded-lg bg-gray-800 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </label>
-        <label className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Type</span>
           <div className="relative">
             <span className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full ${TYPE_DOT[sessionType]}`} />
             <select
               value={sessionType}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setSessionType(e.target.value as SessionType)}
+              onChange={e => setSessionType(e.target.value as SessionType)}
               className="w-full appearance-none rounded-lg bg-gray-800 py-2 pl-8 pr-3 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {SESSION_TYPES.map(t => <option key={t} value={t}>{SESSION_LABELS[t]}</option>)}
             </select>
           </div>
-        </label>
+        </div>
       </div>
 
       {/* Step builder */}
